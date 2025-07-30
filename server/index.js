@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require("express");
 const app = express();
 const mysql = require("mysql2");
@@ -10,10 +11,10 @@ const cron = require('node-cron');
 
 //conectando banco
 const db = mysql.createPool({
-  host: "localhost",
-  user: "filaruuser",
-  password: "password",
-  database: "artefatobandejao",
+ host: process.env.DB_HOST,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_DATABASE,
 });
 
 app.use(cors());
@@ -25,8 +26,8 @@ const transporter = nodemailer.createTransport(
     host: 'smtp.gmail.com',
     port: 465,
     auth: {
-      user: 'filadobandejao@gmail.com',
-      pass: 'gosppbcwrzzpfeaa'
+        user: process.env.MAIL_USER,
+        pass: process.env.MAIL_PASS
     }
   }
 )
@@ -62,7 +63,7 @@ function verificarHorarioAgendamentos() {
       const horarioAgendado = new Date(agendamento.horario);
       const diferenca = horarioAgendado - agora; // Diferença entre o horário agendado e o horário atual
       // Se faltarem 10 minutos (600.000 ms) ou menos, enviaremos o e-mail
-      if (diferenca <= 60000 && diferenca >= 0) {
+      if (diferenca <= 600000 && diferenca >= 0) {
         sendMail(
           agendamento.email, // Enviar para o e-mail do agendamento
           "Lembrete do Agendamento no RU", // Assunto
@@ -73,10 +74,20 @@ function verificarHorarioAgendamentos() {
     })
   })
 }
-cron.schedule('* * * * *', () => {
+//almoco
+cron.schedule('38-58/10 11 * * *', executeCronTask);
+cron.schedule('8-58/10 12 * * *', executeCronTask);
+cron.schedule('8 13 * * *', executeCronTask);
+//janta
+cron.schedule('58 16 * * *', executeCronTask);
+cron.schedule('8-58/10 17 * * *', executeCronTask);
+cron.schedule('8-28/10 18 * * *', executeCronTask);
+
+
+function executeCronTask() {
   console.log("Verificando agendamentos...");
-  verificarAgendamentos();
-});
+  verificarHorarioAgendamentos();
+};
 
 //BANCO
 // criando instancias no banco
@@ -153,7 +164,7 @@ app.post("/agendar", (req, res) => {
             email: email,
             hash: hash, // Retornando o hash gerado
           });
-          sendMail(email, "Lembrete do Agendamento no RU", "Esta mensagem é para te lembrar que está no horário do seu Agendamento! Você tem até 10 minutos para chegar no RU, não se atrase. Obrigado!")
+          sendMail(email, "Lembrete do Agendamento no RU", "Lembre-se que seu agendamento está chegando! Você tem até 10 minutos para chegar no RU. Não se atrase!")
           return console.log("Agendamento feito com sucesso, %s!", email);
         }
       );
@@ -322,29 +333,62 @@ app.post("/criarCardapio", (req, res) => {
     turno,
   } = req.body;
 
-  db.query(
-    "INSERT INTO cardapio (principal, opcao, vegetariana, acompanhamentos, guarnicao, salada, sobremesa, data, turno) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-    [
-      principal,
-      opcao,
-      vegetariana,
-      acompanhamentos,
-      guarnicao,
-      salada,
-      sobremesa,
-      data,
-      turno,
-    ],
-    (err, result) => {
-      //se der erro
-      if (err) {
-        console.error(err);
-        return console.log("Erro ao criar o cardapio:", err);
-      }
-      // se a criação for bem-sucedido
-      console.log("Cardapio Criado com Sucesso");
+  db.query("SELECT * FROM cardapio WHERE data = ? AND turno = ?;", [data, turno], (err, result) => {
+    if (err) {
+      console.error(err);
+      return console.log("Erro ao verificar se ja tem o cardapio: ", err);
     }
-  );
+    else if (result.length === 0) {
+      db.query(
+        "INSERT INTO cardapio (principal, opcao, vegetariana, acompanhamentos, guarnicao, salada, sobremesa, data, turno) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [
+          principal,
+          opcao,
+          vegetariana,
+          acompanhamentos,
+          guarnicao,
+          salada,
+          sobremesa,
+          data,
+          turno,
+        ],
+        (err, result) => {
+          //se der erro
+          if (err) {
+            console.error(err);
+            return console.log("Erro ao criar o cardapio: ", err);
+          }
+          // se a criação for bem-sucedido
+          console.log("Cardapio Criado com Sucesso");
+        }
+      );
+    }
+    else {
+      db.query("UPDATE cardapio SET principal = ?, opcao = ?, vegetariana = ?, acompanhamentos = ?, guarnicao = ?, salada = ?, sobremesa = ? WHERE data = ? AND turno = ?;", [
+        principal,
+        opcao,
+        vegetariana,
+        acompanhamentos,
+        guarnicao,
+        salada,
+        sobremesa,
+        data,
+        turno,
+      ], (err, result) => {
+        if (err) {
+          console.log(err);
+          return console.log("Erro ao criar o cardapio: ", err);
+        }
+        console.log("Cardapio Atualizado com Sucesso");
+      }
+
+      );
+    }
+  }
+
+  )
+
+
 });
 
 
